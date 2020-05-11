@@ -25,7 +25,8 @@ def model_fn(model_dir):
 
     # Determine the device and construct the model.
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = LSTMClassifier(model_info['embedding_dim'], model_info['hidden_dim'], model_info['vocab_size'])
+    model = LSTMClassifier(model_info['embedding_dim'], model_info['hidden_dim'], 
+                           model_info['vocab_size'], model_info['n_layers'], model_info['drop_prob'])
 
     # Load the stored model parameters.
     model_path = os.path.join(model_dir, 'model.pth')
@@ -85,7 +86,7 @@ def train(model, train_loader, epochs, optimizer, loss_fn, device):
             optimizer.step()
 
             total_loss += loss.data.item()
-        print("Epoch: {}, BCELoss: {}".format(epoch, total_loss / len(train_loader)))
+        print("Epoch: {}, BCELoss={};".format(epoch, total_loss / len(train_loader)))
 
 
 if __name__ == '__main__':
@@ -97,18 +98,22 @@ if __name__ == '__main__':
     # Training Parameters
     parser.add_argument('--batch-size', type=int, default=512, metavar='N',
                         help='input batch size for training (default: 512)')
-    parser.add_argument('--epochs', type=int, default=10, metavar='N',
-                        help='number of epochs to train (default: 10)')
+    parser.add_argument('--epochs', type=int, default=15, metavar='N',
+                        help='number of epochs to train (default: 15)')
     parser.add_argument('--seed', type=int, default=1, metavar='S',
                         help='random seed (default: 1)')
 
     # Model Parameters
-    parser.add_argument('--embedding_dim', type=int, default=32, metavar='N',
-                        help='size of the word embeddings (default: 32)')
-    parser.add_argument('--hidden_dim', type=int, default=100, metavar='N',
-                        help='size of the hidden dimension (default: 100)')
-    parser.add_argument('--vocab_size', type=int, default=5000, metavar='N',
-                        help='size of the vocabulary (default: 5000)')
+    parser.add_argument('--embedding_dim', type=int, default=400, metavar='N',
+                        help='size of the word embeddings (default: 400)')
+    parser.add_argument('--hidden_dim', type=int, default=500, metavar='N',
+                        help='size of the hidden dimension (default: 500)')
+    parser.add_argument('--vocab_size', type=int, default=10000, metavar='N',
+                        help='size of the vocabulary (default: 10000)')
+    parser.add_argument('--n_layers', type=int, default=1, metavar='N',
+                        help='size of the layer (default: 1)')
+    parser.add_argument('--drop_prob', type=float, default=0.2, metavar='N',
+                        help='Percentage of dropout (default: 0.2)')
 
     # SageMaker Parameters
     parser.add_argument('--hosts', type=list, default=json.loads(os.environ['SM_HOSTS']))
@@ -128,17 +133,17 @@ if __name__ == '__main__':
     train_loader = _get_train_data_loader(args.batch_size, args.data_dir)
 
     # Build the model.
-    model = LSTMClassifier(args.embedding_dim, args.hidden_dim, args.vocab_size).to(device)
+    model = LSTMClassifier(args.embedding_dim, args.hidden_dim, args.vocab_size, args.n_layers, args.drop_prob).to(device)
 
     with open(os.path.join(args.data_dir, "word_dict.pkl"), "rb") as f:
         model.word_dict = pickle.load(f)
 
-    print("Model loaded with embedding_dim {}, hidden_dim {}, vocab_size {}.".format(
-        args.embedding_dim, args.hidden_dim, args.vocab_size
+    print("Model loaded with embedding_dim {}, hidden_dim {}, vocab_size {}, drop_prob {}.".format(
+        args.embedding_dim, args.hidden_dim, args.vocab_size, args.drop_prob
     ))
 
     # Train the model.
-    optimizer = optim.Adam(model.parameters())
+    optimizer = optim.Adam(model.parameters(), lr=0.005)
     loss_fn = torch.nn.BCELoss()
 
     train(model, train_loader, args.epochs, optimizer, loss_fn, device)
@@ -150,6 +155,8 @@ if __name__ == '__main__':
             'embedding_dim': args.embedding_dim,
             'hidden_dim': args.hidden_dim,
             'vocab_size': args.vocab_size,
+            'n_layers': args.n_layers,
+            'drop_prob': args.drop_prob
         }
         torch.save(model_info, f)
 
