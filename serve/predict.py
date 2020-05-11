@@ -29,7 +29,8 @@ def model_fn(model_dir):
 
     # Determine the device and construct the model.
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = LSTMClassifier(model_info['embedding_dim'], model_info['hidden_dim'], model_info['vocab_size'])
+    model = LSTMClassifier(model_info['embedding_dim'], model_info['hidden_dim'], 
+                           model_info['vocab_size'], model_info['n_layers'], model_info['drop_prob'])
 
     # Load the store model parameters.
     model_path = os.path.join(model_dir, 'model.pth')
@@ -65,11 +66,9 @@ def predict_fn(input_data, model):
     if model.word_dict is None:
         raise Exception('Model has not been loaded properly, no word_dict.')
     
-    # TODO: Process input_data so that it is ready to be sent to our model.
-    #       You should produce two variables:
-    #         data_X   - A sequence of length 500 which represents the converted review
+    #         data_X   - A sequence of length 400 which represents the converted review
     #         data_len - The length of the review
-    words = review_to_words(input_data)
+    words = review_to_words(input_data) #convert review to a list of words
 
     data_X, data_len = convert_and_pad(model.word_dict, words)
 
@@ -81,15 +80,13 @@ def predict_fn(input_data, model):
     data = torch.from_numpy(data_pack)
     data = data.to(device)
 
-    # Make sure to put the model into evaluation mode
-    model.eval()
+    model.eval() #put model in evaluation mode
 
-    # TODO: Compute the result of applying the model to the input data. The variable `result` should
     #       be a numpy array which contains a single integer which is either 1 or 0
 
     with torch.no_grad():
         output = model.forward(data)
 
-    result = np.round(output.numpy())
+    result = np.round(output.numpy()) #round the output result
 
     return result
